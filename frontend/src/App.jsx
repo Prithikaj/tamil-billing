@@ -18,7 +18,7 @@ import PriceDialog from './components/PriceDialog'
 
 // In local dev: empty string → Vite proxy handles it
 // In production: set VITE_API_URL=https://your-app.onrender.com in Vercel
-const API = import.meta.env.VITE_API_URL ?? ''
+const API = import.meta.env.VITE_API_URL ?? 'https://tamil-billing.onrender.com'
 
 export default function App() {
   const [items, setItems] = useState([])
