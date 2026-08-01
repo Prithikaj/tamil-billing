@@ -18,7 +18,8 @@ app = FastAPI(title="Tamil Voice Billing API", version="1.0.0")
 # Allow the Vite dev server and the Vercel production frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # tighten this to your Vercel URL after first deploy
+    allow_origins=["http://localhost:5173",
+        "https://tamil-billing.vercel.app"],   # tighten this to your Vercel URL after first deploy
     allow_methods=["*"],
     allow_headers=["*"],
 )
