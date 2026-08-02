@@ -288,8 +288,8 @@ export default function App() {
         </div>
       </main>
 
-      {/* Sticky bottom action bar */}
-      <footer className="sticky bottom-0 bg-white border-t border-gray-200 shadow-up p-4">
+      {/* Sticky bottom action bar — sits above the global tab bar (h-16) */}
+      <footer className="sticky bottom-16 bg-white border-t border-gray-200 shadow-up p-4 z-20">
         <div className="max-w-2xl mx-auto flex items-center gap-3">
           <VoiceButton
             onResult={handleVoiceResult}
