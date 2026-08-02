@@ -15,14 +15,10 @@ from bill import format_bill_text
 
 app = FastAPI(title="Tamil Voice Billing API", version="1.0.0")
 
-# Allow the Vite dev server and the Vercel production frontend
+# Allow all origins — covers localhost, Vercel preview URLs, and production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173",
-        "https://tamil-billing-df06mee8r-start22.vercel.app"
-        "https://tamil-billing-git-main-start22.vercel.app",
-        ],
-    allow_credentials=True,   # tighten this to your Vercel URL after first deploy
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
