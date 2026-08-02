@@ -1,73 +1,69 @@
 /**
- * useKhata — manages credit customer data in localStorage.
- *
- * Data shape:
- * {
- *   [customerId]: {
- *     id: string,
- *     name: string,
- *     phone: string,
- *     createdAt: string,
- *     transactions: [
- *       {
- *         id: string,
- *         type: 'purchase' | 'payment',
- *         date: string,
- *         amount: number,         // always positive
- *         note: string,           // bill summary or payment note
- *         items: []               // only for purchase type
- *       }
- *     ]
- *   }
- * }
+ * useKhata — manages credit customer data via the FastAPI backend (PostgreSQL).
+ * All customer and transaction data is stored server-side.
+ * WhatsApp link is still built client-side.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import axios from 'axios'
 
-const STORAGE_KEY = 'jaya_vilas_khata'
-
-function load() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
-  } catch {
-    return {}
-  }
-}
-
-function save(data) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-}
-
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2)
-}
+const API = import.meta.env.VITE_API_URL ?? 'https://tamil-billing.onrender.com'
 
 export function useKhata() {
-  const [customers, setCustomers] = useState(load)
+  // customers is a plain object keyed by id (same shape as before so UI doesn't change)
+  const [customers, setCustomers] = useState({})
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
 
-  // Persist to localStorage on every change
-  useEffect(() => {
-    save(customers)
-  }, [customers])
+  // ── Helpers ─────────────────────────────────────────────────────
+  // Convert the server's array response into the id-keyed map the UI expects
+  const toMap = (list) =>
+    Object.fromEntries(
+      list.map((c) => [
+        String(c.id),
+        {
+          ...c,
+          id: String(c.id),
+          transactions: c.transactions.map((tx) => ({
+            ...tx,
+            id: String(tx.id),
+            date: tx.created_at,
+          })),
+        },
+      ])
+    )
 
-  // ── Add a new customer ──────────────────────────────────────────
-  const addCustomer = (name, phone) => {
-    const id = uid()
-    setCustomers((prev) => ({
-      ...prev,
-      [id]: {
-        id,
-        name: name.trim(),
-        phone: phone.trim(),
-        createdAt: new Date().toISOString(),
-        transactions: [],
-      },
-    }))
-    return id
+  // ── Load all customers on mount ──────────────────────────────────
+  const fetchAll = useCallback(async () => {
+    setLoading(true)
+    try {
+      const { data } = await axios.get(`${API}/customers`)
+      setCustomers(toMap(data))
+      setError(null)
+    } catch (e) {
+      setError('வாடிக்கையாளர்களை ஏற்ற முடியவில்லை')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchAll() }, [fetchAll])
+
+  // ── Add a new customer ───────────────────────────────────────────
+  const addCustomer = async (name, phone) => {
+    const { data } = await axios.post(`${API}/customers`, { name, phone })
+    const c = {
+      ...data,
+      id: String(data.id),
+      transactions: [],
+    }
+    setCustomers((prev) => ({ ...prev, [c.id]: c }))
+    return c.id
   }
 
-  // ── Delete a customer ───────────────────────────────────────────
-  const deleteCustomer = (id) => {
+  // ── Delete a customer ────────────────────────────────────────────
+  const deleteCustomer = async (id) => {
+    await axios.delete(`${API}/customers/${id}`)
     setCustomers((prev) => {
       const next = { ...prev }
       delete next[id]
@@ -75,66 +71,78 @@ export function useKhata() {
     })
   }
 
-  // ── Add a purchase transaction ──────────────────────────────────
-  const addPurchase = (customerId, items, total) => {
-    const note = items.map((it) => `${it.product} x${it.qty}`).join(', ')
-    const tx = {
-      id: uid(),
-      type: 'purchase',
-      date: new Date().toISOString(),
-      amount: total,
-      note,
+  // ── Add a purchase transaction ───────────────────────────────────
+  const addPurchase = async (customerId, items, total) => {
+    const { data } = await axios.post(`${API}/customers/${customerId}/purchase`, {
       items,
-    }
+      total,
+    })
     setCustomers((prev) => ({
       ...prev,
       [customerId]: {
-        ...prev[customerId],
-        transactions: [...prev[customerId].transactions, tx],
+        ...data,
+        id: String(data.id),
+        transactions: data.transactions.map((tx) => ({
+          ...tx,
+          id: String(tx.id),
+          date: tx.created_at,
+        })),
       },
     }))
   }
 
-  // ── Record a payment ────────────────────────────────────────────
-  const addPayment = (customerId, amount, note = '') => {
-    const tx = {
-      id: uid(),
-      type: 'payment',
-      date: new Date().toISOString(),
-      amount: parseFloat(amount),
-      note: note || 'Payment received',
-      items: [],
-    }
+  // ── Record a payment ─────────────────────────────────────────────
+  const addPayment = async (customerId, amount, note = '') => {
+    const { data } = await axios.post(`${API}/customers/${customerId}/payment`, {
+      amount,
+      note,
+    })
     setCustomers((prev) => ({
       ...prev,
       [customerId]: {
-        ...prev[customerId],
-        transactions: [...prev[customerId].transactions, tx],
+        ...data,
+        id: String(data.id),
+        transactions: data.transactions.map((tx) => ({
+          ...tx,
+          id: String(tx.id),
+          date: tx.created_at,
+        })),
       },
     }))
   }
 
-  // ── Delete a single transaction ─────────────────────────────────
-  const deleteTransaction = (customerId, txId) => {
+  // ── Delete a single transaction ──────────────────────────────────
+  const deleteTransaction = async (customerId, txId) => {
+    const { data } = await axios.delete(
+      `${API}/customers/${customerId}/transactions/${txId}`
+    )
     setCustomers((prev) => ({
       ...prev,
       [customerId]: {
-        ...prev[customerId],
-        transactions: prev[customerId].transactions.filter((t) => t.id !== txId),
+        ...data,
+        id: String(data.id),
+        transactions: data.transactions.map((tx) => ({
+          ...tx,
+          id: String(tx.id),
+          date: tx.created_at,
+        })),
       },
     }))
   }
 
-  // ── Computed balance for a customer ────────────────────────────
+  // ── Computed balance (server also returns it, but keep local too) ─
   const getBalance = (customerId) => {
     const c = customers[customerId]
     if (!c) return 0
-    return c.transactions.reduce((sum, tx) => {
-      return tx.type === 'purchase' ? sum + tx.amount : sum - tx.amount
-    }, 0)
+    // Use server-computed balance if present
+    if (typeof c.balance === 'number') return c.balance
+    return c.transactions.reduce(
+      (sum, tx) => (tx.type === 'purchase' ? sum + tx.amount : sum - tx.amount),
+      0
+    )
   }
 
-  // ── Build WhatsApp message for a customer ───────────────────────
+  // ── Build WhatsApp link (client-side, no API needed) ─────────────
   const buildWhatsAppLink = (customerId) => {
     const c = customers[customerId]
     if (!c) return ''
@@ -179,6 +187,8 @@ export function useKhata() {
 
   return {
     customers,
+    loading,
+    error,
     addCustomer,
     deleteCustomer,
     addPurchase,
@@ -186,5 +196,6 @@ export function useKhata() {
     deleteTransaction,
     getBalance,
     buildWhatsAppLink,
+    refresh: fetchAll,
   }
 }

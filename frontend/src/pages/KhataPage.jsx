@@ -1,6 +1,5 @@
 /**
- * KhataPage — Credit ledger page.
- * Accessible from the main app via the bottom nav tab.
+ * KhataPage — Credit ledger page backed by PostgreSQL.
  */
 
 import { useState } from 'react'
@@ -8,13 +7,13 @@ import { useKhata } from '../hooks/useKhata'
 import CustomerList from '../components/khata/CustomerList'
 import CustomerDetail from '../components/khata/CustomerDetail'
 import AddCustomerDialog from '../components/khata/AddCustomerDialog'
-
-// Mini bill builder used when adding a purchase to a customer
 import KhataBillEntry from '../components/khata/KhataBillEntry'
 
 export default function KhataPage() {
   const {
     customers,
+    loading,
+    error,
     addCustomer,
     deleteCustomer,
     addPurchase,
@@ -22,23 +21,53 @@ export default function KhataPage() {
     deleteTransaction,
     getBalance,
     buildWhatsAppLink,
+    refresh,
   } = useKhata()
 
   const [selectedId, setSelectedId] = useState(null)
   const [showAddCustomer, setShowAddCustomer] = useState(false)
   const [showBillEntry, setShowBillEntry] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const selected = selectedId ? customers[selectedId] : null
 
-  const handleAddCustomer = (name, phone) => {
-    const id = addCustomer(name, phone)
-    setSelectedId(id)
-    setShowAddCustomer(false)
+  const handleAddCustomer = async (name, phone) => {
+    setSaving(true)
+    try {
+      const id = await addCustomer(name, phone)
+      setSelectedId(id)
+      setShowAddCustomer(false)
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleAddPurchase = (items, total) => {
-    addPurchase(selectedId, items, total)
-    setShowBillEntry(false)
+  const handleAddPurchase = async (items, total) => {
+    setSaving(true)
+    try {
+      await addPurchase(selectedId, items, total)
+      setShowBillEntry(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAddPayment = async (amount, note) => {
+    setSaving(true)
+    try {
+      await addPayment(selectedId, amount, note)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteTransaction = async (txId) => {
+    await deleteTransaction(selectedId, txId)
+  }
+
+  const handleDeleteCustomer = async () => {
+    await deleteCustomer(selectedId)
+    setSelectedId(null)
   }
 
   return (
@@ -51,31 +80,60 @@ export default function KhataPage() {
 
       {/* Content */}
       <main className="flex-1 p-4 max-w-2xl mx-auto w-full overflow-hidden flex flex-col">
-        {selected ? (
-          <CustomerDetail
-            customer={selected}
-            balance={getBalance(selectedId)}
-            whatsAppLink={buildWhatsAppLink(selectedId)}
-            onBack={() => setSelectedId(null)}
-            onAddPurchase={() => setShowBillEntry(true)}
-            onAddPayment={(amount, note) => addPayment(selectedId, amount, note)}
-            onDeleteTransaction={(txId) => deleteTransaction(selectedId, txId)}
-            onDeleteCustomer={() => {
-              deleteCustomer(selectedId)
-              setSelectedId(null)
-            }}
-          />
-        ) : (
-          <CustomerList
-            customers={customers}
-            getBalance={getBalance}
-            onSelect={setSelectedId}
-            onAdd={() => setShowAddCustomer(true)}
-          />
+
+        {/* Loading state */}
+        {loading && (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+
+        {/* Error state */}
+        {error && !loading && (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3">
+            <p className="text-red-500 text-sm">{error}</p>
+            <button
+              onClick={refresh}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm"
+            >
+              மீண்டும் முயற்சி
+            </button>
+          </div>
+        )}
+
+        {/* Saving overlay */}
+        {saving && (
+          <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
+            <div className="bg-white rounded-xl px-6 py-4 flex items-center gap-3 shadow-xl">
+              <div className="w-6 h-6 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-gray-700 font-medium">சேமிக்கிறது...</span>
+            </div>
+          </div>
+        )}
+
+        {!loading && !error && (
+          selected ? (
+            <CustomerDetail
+              customer={selected}
+              balance={getBalance(selectedId)}
+              whatsAppLink={buildWhatsAppLink(selectedId)}
+              onBack={() => setSelectedId(null)}
+              onAddPurchase={() => setShowBillEntry(true)}
+              onAddPayment={handleAddPayment}
+              onDeleteTransaction={handleDeleteTransaction}
+              onDeleteCustomer={handleDeleteCustomer}
+            />
+          ) : (
+            <CustomerList
+              customers={customers}
+              getBalance={getBalance}
+              onSelect={setSelectedId}
+              onAdd={() => setShowAddCustomer(true)}
+            />
+          )
         )}
       </main>
 
-      {/* Add customer dialog */}
       {showAddCustomer && (
         <AddCustomerDialog
           onSave={handleAddCustomer}
@@ -83,7 +141,6 @@ export default function KhataPage() {
         />
       )}
 
-      {/* Bill entry for khata purchase */}
       {showBillEntry && selected && (
         <KhataBillEntry
           customerName={selected.name}

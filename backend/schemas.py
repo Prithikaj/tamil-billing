@@ -1,6 +1,9 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
+from datetime import datetime
 
+
+# ── Billing (unchanged) ─────────────────────────────────────────────────────
 
 class ParseRequest(BaseModel):
     text: str
@@ -36,3 +39,44 @@ class FinishRequest(BaseModel):
 class FinishResponse(BaseModel):
     total: float
     message: str = ""
+
+
+# ── Khata API schemas ────────────────────────────────────────────────────────
+
+class CustomerCreate(BaseModel):
+    name: str
+    phone: str
+
+
+class TransactionOut(BaseModel):
+    id: int
+    type: str          # 'purchase' | 'payment'
+    amount: float
+    note: str
+    items: List[BillItem]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CustomerOut(BaseModel):
+    id: int
+    name: str
+    phone: str
+    created_at: datetime
+    transactions: List[TransactionOut] = []
+    balance: float = 0.0
+
+    class Config:
+        from_attributes = True
+
+
+class PurchaseCreate(BaseModel):
+    items: List[BillItem]
+    total: float
+
+
+class PaymentCreate(BaseModel):
+    amount: float
+    note: str = ""
