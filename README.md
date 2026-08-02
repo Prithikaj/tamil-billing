@@ -1,6 +1,6 @@
 # 🛒 Tamil Voice Billing Assistant
 
-A mobile-first web app for **JAYA VILAS, Cheran Nagar** — speak item names in Tamil, get an instant bill, share it via WhatsApp, and manage customer credit accounts (Khata) backed by a PostgreSQL database.
+A mobile-first web app for **Shops** — speak item names in Tamil, get an instant bill, share it via WhatsApp, and manage customer credit accounts (Khata) backed by a PostgreSQL database.
 
 ---
 
