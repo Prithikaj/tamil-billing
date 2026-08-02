@@ -1,6 +1,29 @@
 # 🛒 Tamil Voice Billing Assistant
 
-A mobile-friendly web app for small shops — speak item names in Tamil, get an instant bill, and optionally send it to the customer's WhatsApp.
+A mobile-first web app for **JAYA VILAS, Cheran Nagar** — speak item names in Tamil, get an instant bill, share it via WhatsApp, and manage customer credit accounts (Khata) backed by a PostgreSQL database.
+
+---
+
+## Features
+
+### Billing Tab 🛒
+- Tamil voice input using browser Speech Recognition (`ta-IN`)
+- Speaks item name → AI parses product, quantity, unit
+- Price dialog with live subtotal preview
+- Editable bill table — tap any price to change it
+- Delete items
+- Running total shown on finish button
+- WhatsApp share via `wa.me` deep link (no API key needed)
+- Print-ready bill with store header, address, and date
+
+### Khata Tab 📒 (Credit Ledger)
+- Add credit customers with name and phone number
+- Record purchases on credit using voice input
+- Record payments — auto-deducted from balance
+- Full transaction history per customer
+- Balance shown in red (owes) / green (clear) / blue (overpaid)
+- WhatsApp statement sent directly to customer's number
+- Data stored in **PostgreSQL** — survives browser clears, works across devices
 
 ---
 
@@ -9,28 +32,42 @@ A mobile-friendly web app for small shops — speak item names in Tamil, get an 
 ```
 voice-billing/
 ├── backend/
-│   ├── main.py          FastAPI app
-│   ├── schemas.py       Pydantic models
-│   ├── parser.py        Tamil text → product/qty/unit
-│   ├── bill.py          Bill formatting + WhatsApp send
+│   ├── main.py          FastAPI app + all API routes
+│   ├── models.py        SQLModel DB models (Customer, Transaction)
+│   ├── database.py      DB engine setup (PostgreSQL / SQLite fallback)
+│   ├── schemas.py       Pydantic request/response schemas
+│   ├── parser.py        Tamil text → product/qty/unit (rule-based)
+│   ├── bill.py          Bill text formatter
 │   ├── requirements.txt
-│   └── .env.example     Twilio credentials template
+│   └── .env.example
 └── frontend/
     ├── index.html
     ├── vite.config.js
     └── src/
-        ├── App.jsx
+        ├── main.jsx
+        ├── Root.jsx         Tab navigation (Billing / Khata)
+        ├── App.jsx          Billing screen
         ├── index.css
+        ├── hooks/
+        │   └── useKhata.js  Khata state — calls backend API
+        ├── pages/
+        │   └── KhataPage.jsx
         └── components/
             ├── Bill.jsx
             ├── ItemCard.jsx
             ├── VoiceButton.jsx
-            └── PriceDialog.jsx
+            ├── PriceDialog.jsx
+            └── khata/
+                ├── CustomerList.jsx
+                ├── CustomerDetail.jsx
+                ├── AddCustomerDialog.jsx
+                ├── PaymentDialog.jsx
+                └── KhataBillEntry.jsx
 ```
 
 ---
 
-## Setup
+## Local Development
 
 ### Backend
 
@@ -39,18 +76,10 @@ cd backend
 python -m venv venv
 venv\Scripts\activate          # Windows
 pip install -r requirements.txt
-```
-
-**Optional — WhatsApp (Twilio):**
-```bash
-copy .env.example .env
-# Fill in TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN
-```
-
-Start the API server:
-```bash
 uvicorn main:app --reload --port 8000
 ```
+
+Local dev uses **SQLite** automatically (`billing.db`) — no database setup needed.
 
 ### Frontend
 
@@ -60,50 +89,123 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173 in Chrome on your phone or desktop.
+Open **http://localhost:5173** in **Chrome** (required for Speech Recognition).
 
 ---
 
-## How to Use
+## Environment Variables
 
-1. Tap **🎤 பேசுங்கள்** and speak an item in Tamil  
-   Example: *"அரிசி இரண்டு கிலோ"*
-2. The app recognises the item and asks for the **price per unit**
-3. Type the price and tap **சேர்** — it calculates the subtotal automatically
-4. Repeat for each item
-5. Optionally enter the customer's **10-digit mobile number** for WhatsApp delivery
-6. Tap **✅ பில் முடி** to see the final bill and send it
+### Backend — `.env` (copy from `.env.example`)
 
----
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `DATABASE_URL` | PostgreSQL connection string from Render | Production only |
 
-## WhatsApp Setup (Twilio — Free Sandbox)
+Local dev automatically falls back to SQLite when `DATABASE_URL` is not set.
 
-1. Sign up at https://www.twilio.com/try-twilio (free)
-2. Go to **Messaging → Try it out → Send a WhatsApp message**
-3. Follow the sandbox join instructions on the customer's phone (one-time)
-4. Copy your Account SID and Auth Token into `.env`
-5. The default `TWILIO_WHATSAPP_FROM` sandbox number is `whatsapp:+14155238886`
+### Frontend — set in Vercel dashboard
 
-The customer must first join the sandbox by sending  
-`join <your-sandbox-keyword>` to **+14155238886** on WhatsApp — only once.
-
-For production (no sandbox), upgrade to a paid Twilio number with WhatsApp Business API approval.
+| Variable | Description |
+|----------|-------------|
+| `VITE_API_URL` | Your Render backend URL, e.g. `https://tamil-billing.onrender.com` |
 
 ---
 
-## Supported Tamil Numbers
+## Deployment
 
-ஒரு, இரண்டு, மூன்று, நான்கு, ஐந்து, ஆறு, ஏழு, எட்டு, ஒன்பது, பத்து, இருபது, முப்பது, நூறு, அரை (0.5), கால் (0.25)
+### Stack
+| Part | Platform | Cost |
+|------|----------|------|
+| Backend (FastAPI) | Render Web Service | Free |
+| Database (PostgreSQL) | Render PostgreSQL | Free |
+| Frontend (React) | Vercel | Free |
 
-## Supported Tamil Units
+### 1 — Backend on Render
 
+1. Go to https://render.com → **New → Web Service**
+2. Connect your GitHub repo
+3. Settings:
+
+| Field | Value |
+|-------|-------|
+| Root Directory | `backend` |
+| Runtime | Python 3 |
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
+| Instance Type | Free |
+
+### 2 — Database on Render
+
+1. **New → PostgreSQL**
+2. Name: `tamil-billing-db`, Region: Virginia, Plan: Free
+3. After creation, copy the **Internal Database URL**
+4. In your Web Service → **Environment** → add:
+   - `DATABASE_URL` = (paste Internal Database URL)
+5. Render auto-redeploys — tables are created automatically on first startup
+
+### 3 — Frontend on Vercel
+
+1. Go to https://vercel.com → **Add New → Project**
+2. Import your GitHub repo
+3. Settings:
+
+| Field | Value |
+|-------|-------|
+| Root Directory | `frontend` |
+| Framework | Vite |
+| Build Command | `npm run build` |
+| Output Directory | `dist` |
+
+4. **Environment Variables** → add:
+   - `VITE_API_URL` = `https://tamil-billing.onrender.com`
+5. Deploy
+
+---
+
+## API Reference
+
+### Billing
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/` | Health check |
+| POST | `/parse` | Tamil text → `{ product, quantity, unit }` |
+| POST | `/calculate` | `{ qty, price }` → `{ subtotal }` |
+| POST | `/finish` | `{ items[] }` → `{ total }` |
+
+### Khata (Credit Ledger)
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/customers` | List all customers with balances |
+| POST | `/customers` | Create customer `{ name, phone }` |
+| GET | `/customers/{id}` | Get one customer with transactions |
+| DELETE | `/customers/{id}` | Delete customer and all transactions |
+| POST | `/customers/{id}/purchase` | Add purchase `{ items[], total }` |
+| POST | `/customers/{id}/payment` | Add payment `{ amount, note }` |
+| DELETE | `/customers/{id}/transactions/{tx_id}` | Delete a transaction |
+
+---
+
+## Tamil Voice Support
+
+**Numbers recognised:**
+ஒரு (1), இரண்டு (2), மூன்று (3), நான்கு (4), ஐந்து (5), ஆறு (6), ஏழு (7), எட்டு (8), ஒன்பது (9), பத்து (10), இருபது (20), நூறு (100), அரை (0.5), கால் (0.25)
+
+**Units recognised:**
 கிலோ → kg | கிராம் → g | லிட்டர் → litre | பாக்கெட் → packet | டின் → tin | பீஸ் → piece | பாட்டில் → bottle
 
+**Example phrases:**
+- `அரிசி இரண்டு கிலோ` → Rice, 2 kg
+- `பால் மூன்று பாக்கெட்` → Milk, 3 packets
+- `எண்ணெய் அரை லிட்டர்` → Oil, 0.5 litre
+
 ---
 
-## Version 2 Ideas
+## Notes
 
-- Whisper AI for better Tamil accuracy
-- PDF bill generation
-- PWA / offline support
-- Product price memory (localStorage)
+- Voice recognition requires **Chrome** (desktop or Android). On iPhone use **Safari**.
+- Render free tier sleeps after 15 min of inactivity — first request takes ~30s to wake. Use https://uptimerobot.com to keep it awake with a free ping every 5 minutes.
+- The `/calculate` endpoint exists but subtotals are computed client-side for speed.
+- WhatsApp sharing uses `wa.me` deep links — no Twilio or API keys needed.
+- All data (customers, transactions) is stored in PostgreSQL. Billing (daily bills) is stateless — no data stored.
